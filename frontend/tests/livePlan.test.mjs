@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {buildLivePlan,researchTimeline,candidates} from '../src/livePlan.js';
+const report={parts:[[{text:'**1. Real Venue**\n- Venue Details: Indoor space. '},{text:'Real Venue',url:'https://example.com/venue'},{text:'\n**Catering Services:**\n**1. Good Kitchen**\n- Cuisine: meals. '},{text:'Good Kitchen',url:'https://example.com/food'},{text:'\n**Suggested Schedule:**\n1. **6:00 PM – 6:30 PM:** Welcome guests.\n2. **9:30 PM – 10:00 PM:** Closing.\n**Next Steps:**\nGet quotes.'}]],retrieved_at:'now'};
+const event={id:'test',kind:'birthday',location:'Accra',date:'2027-06-20',start_time:'18:00',duration_hours:4,budget_cents:500000,agent:{research:report}};
+test('cited candidates and missing services remain explicit',()=>{const p=buildLivePlan(event);assert.equal(p.items.length,3);assert.equal(p.items[0].name,'Real Venue');assert.equal(p.items[1].name,'Good Kitchen');assert.equal(p.items[2].missing,true);assert.ok(p.items[2].cost_cents>0);assert.ok(p.items.every(i=>i.cost_basis.includes('quote needed')));});
+test('totals include allowances and detect user over-budget estimates',()=>{const p=buildLivePlan(event,{costs:{venue:500000}});assert.equal(p.total,p.subtotal+p.fees+p.reserve);assert.ok(p.total>event.budget_cents);assert.equal(p.items[0].cost_basis,'Your provisional estimate');});
+test('unsafe URLs are discarded',()=>{assert.deepEqual(candidates({parts:[[{text:'Bad',url:'javascript:alert(1)'}]]},'Accra'),[]);});
+test('schedule is extracted from research',()=>{const rows=researchTimeline(event);assert.equal(rows.length,2);assert.equal(rows[0].at,'2027-06-20T18:00');assert.equal(rows[1].task,'Closing.');});
+test('fallback schedule is explicitly a template',()=>{const rows=researchTimeline({...event,agent:{research:{parts:[]}}});assert.ok(rows.every(r=>r.basis.includes('template')));assert.equal(rows.at(-1).at,'2027-06-20T22:00');});
+test('invalid saved numbers never poison totals',()=>{assert.ok(Number.isFinite(buildLivePlan(event,{costs:{venue:NaN}}).total));});
